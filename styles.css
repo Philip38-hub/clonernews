@@ -70,3 +70,25 @@ nav ul li a {
     margin-bottom: 10px;
     font-weight: bold;
 }
+
+.new-stories-alert {
+    background-color: #4CAF50;
+    color: white;
+    text-align: center;
+    padding: 10px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    cursor: pointer;
+}
+
+.story a, .job a, .poll a {
+    color: #1a0dab;
+    text-decoration: none;
+}
+
+.story a:hover, .job a:hover, .poll a:hover {
+    text-decoration: underline;
+}

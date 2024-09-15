@@ -1,100 +1,101 @@
+// Constants
+const NEW_STORIES_URL = 'https://hacker-news.firebaseio.com/v0/newstories.json';
+const JOB_STORIES_URL = 'https://hacker-news.firebaseio.com/v0/jobstories.json';
+const POLL_STORIES_URL = 'https://hacker-news.firebaseio.com/v0/pollstories.json';
+const ITEM_URL = 'https://hacker-news.firebaseio.com/v0/item/';
+
 const newStoriesColumn = document.getElementById('stories-column');
 const jobsColumn = document.getElementById('jobs-column');
 const pollsColumn = document.getElementById('polls-column');
 
-// API URLs
-const newStoriesURL = 'https://hacker-news.firebaseio.com/v0/newstories.json?print=pretty';
-const jobsURL = 'https://hacker-news.firebaseio.com/v0/jobstories.json?print=pretty';
-const pollsURL = 'https://hacker-news.firebaseio.com/v0/pollstories.json?print=pretty';
-const storyURL = (id) => `https://hacker-news.firebaseio.com/v0/item/${id}.json?print=pretty`;
+const STORIES_PER_BATCH = 10;
+const UPDATE_INTERVAL = 5000; // 5 seconds
 
 let storiesIds = [];
 let currentStoryIndex = 0;
-const storiesPerBatch = 10; // Load 10 stories per scroll
-let latestStoryId = null; // Track the latest story ID for live update
+let latestStoryId = null;
 
-// Throttling scroll event to avoid excessive requests
-let isScrolling = false;
+// Debounce function to limit the rate of API calls
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
 
-window.addEventListener('scroll', () => {
-    if (!isScrolling) {
-        window.requestAnimationFrame(() => {
-            if (window.innerHeight + window.scrollY >= document.body.offsetHeight) {
-                loadNextStories();
-            }
-            isScrolling = false;
-        });
-        isScrolling = true;
+// Fetch data from API
+async function fetchData(url) {
+    const response = await fetch(url);
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
     }
-});
+    return await response.json();
+}
 
-// Fetch the new stories, jobs, and polls
-async function fetchStoriesIds() {
+// Load stories
+async function loadStories() {
     try {
-        const response = await fetch(newStoriesURL);
-        storiesIds = await response.json();
+        storiesIds = await fetchData(NEW_STORIES_URL);
         latestStoryId = storiesIds[0];
-        loadNextStories(); // Load initial batch of stories
+        loadNextStories();
     } catch (error) {
-        console.error('Error fetching stories IDs:', error);
+        console.error('Error fetching stories:', error);
     }
 }
 
-async function fetchJobStoriesIds() {
-    try {
-        const response = await fetch(jobsURL);
-        const jobIds = await response.json();
-        loadNextJobs(jobIds);
-    } catch (error) {
-        console.error('Error fetching job stories:', error);
+// Load next batch of stories
+async function loadNextStories() {
+    const nextBatch = storiesIds.slice(currentStoryIndex, currentStoryIndex + STORIES_PER_BATCH);
+    for (const id of nextBatch) {
+        await fetchAndDisplayStory(id);
     }
+    currentStoryIndex += STORIES_PER_BATCH;
 }
 
-async function fetchPollStoriesIds() {
+// Fetch and display a story
+async function fetchAndDisplayStory(id) {
     try {
-        const response = await fetch(pollsURL);
-        const pollIds = await response.json();
-        loadNextPolls(pollIds);
-    } catch (error) {
-        console.error('Error fetching poll stories:', error);
-    }
-}
-
-// Fetch and display stories, jobs, and polls
-function loadNextStories() {
-    const nextBatch = storiesIds.slice(currentStoryIndex, currentStoryIndex + storiesPerBatch);
-    nextBatch.forEach(id => fetchStoryById(id));
-    currentStoryIndex += storiesPerBatch;
-}
-
-function loadNextJobs(jobIds) {
-    jobIds.slice(0, 10).forEach(id => fetchJobById(id));
-}
-
-function loadNextPolls(pollIds) {
-    pollIds.slice(0, 10).forEach(id => fetchPollById(id));
-}
-
-// Fetch a story by ID and append it to the DOM
-async function fetchStoryById(id) {
-    try {
-        const res = await fetch(storyURL(id));
-        const storyData = await res.json();
+        const storyData = await fetchData(`${ITEM_URL}${id}.json`);
         if (storyData && storyData.type === 'story') {
             displayStory(storyData);
-            if (storyData.kids) {
-                fetchCommentsByIds(storyData.kids, storyData.id);
-            }
         }
     } catch (error) {
         console.error('Error fetching story:', error);
     }
 }
 
-async function fetchJobById(id) {
+// Display a story
+function displayStory(story) {
+    const storyDiv = document.createElement('div');
+    storyDiv.classList.add('story');
+    storyDiv.innerHTML = `
+        <h3><a href="${story.url}" target="_blank">${story.title}</a></h3>
+        <p>by ${story.by} | Score: ${story.score} | Comments: ${story.descendants || 0}</p>
+    `;
+    newStoriesColumn.appendChild(storyDiv);
+}
+
+// Load jobs
+async function loadJobs() {
     try {
-        const res = await fetch(storyURL(id));
-        const jobData = await res.json();
+        const jobIds = await fetchData(JOB_STORIES_URL);
+        for (const id of jobIds.slice(0, 10)) {
+            await fetchAndDisplayJob(id);
+        }
+    } catch (error) {
+        console.error('Error fetching jobs:', error);
+    }
+}
+
+// Fetch and display a job
+async function fetchAndDisplayJob(id) {
+    try {
+        const jobData = await fetchData(`${ITEM_URL}${id}.json`);
         if (jobData && jobData.type === 'job') {
             displayJob(jobData);
         }
@@ -103,10 +104,33 @@ async function fetchJobById(id) {
     }
 }
 
-async function fetchPollById(id) {
+// Display a job
+function displayJob(job) {
+    const jobDiv = document.createElement('div');
+    jobDiv.classList.add('job');
+    jobDiv.innerHTML = `
+        <h3><a href="${job.url}" target="_blank">${job.title}</a></h3>
+        <p>by ${job.by}</p>
+    `;
+    jobsColumn.appendChild(jobDiv);
+}
+
+// Load polls
+async function loadPolls() {
     try {
-        const res = await fetch(storyURL(id));
-        const pollData = await res.json();
+        const pollIds = await fetchData(POLL_STORIES_URL);
+        for (const id of pollIds.slice(0, 10)) {
+            await fetchAndDisplayPoll(id);
+        }
+    } catch (error) {
+        console.error('Error fetching polls:', error);
+    }
+}
+
+// Fetch and display a poll
+async function fetchAndDisplayPoll(id) {
+    try {
+        const pollData = await fetchData(`${ITEM_URL}${id}.json`);
         if (pollData && pollData.type === 'poll') {
             displayPoll(pollData);
         }
@@ -115,93 +139,21 @@ async function fetchPollById(id) {
     }
 }
 
-// Display elements
-function displayStory(story) {
-    const storyDiv = document.createElement('div');
-    storyDiv.classList.add('story');
-
-    const storyTitle = document.createElement('h3');
-    const storyLink = document.createElement('a');
-    storyLink.href = story.url;
-    storyLink.textContent = story.title;
-    storyTitle.appendChild(storyLink);
-
-    const storyDetails = document.createElement('p');
-    storyDetails.innerHTML = `by ${story.by} | Score: ${story.score} | Comments: ${story.descendants}`;
-
-    storyDiv.appendChild(storyTitle);
-    storyDiv.appendChild(storyDetails);
-
-    newStoriesColumn.appendChild(storyDiv);
-}
-
-function displayJob(job) {
-    const jobDiv = document.createElement('div');
-    jobDiv.classList.add('job');
-
-    const jobTitle = document.createElement('h3');
-    jobTitle.textContent = job.title;
-
-    const jobDetails = document.createElement('p');
-    jobDetails.textContent = `by ${job.by} | Score: ${job.score}`;
-
-    jobDiv.appendChild(jobTitle);
-    jobDiv.appendChild(jobDetails);
-
-    jobsColumn.appendChild(jobDiv);
-}
-
+// Display a poll
 function displayPoll(poll) {
     const pollDiv = document.createElement('div');
     pollDiv.classList.add('poll');
-
-    const pollTitle = document.createElement('h3');
-    pollTitle.textContent = poll.title;
-
-    const pollDetails = document.createElement('p');
-    pollDetails.textContent = `by ${poll.by} | Score: ${poll.score}`;
-
-    pollDiv.appendChild(pollTitle);
-    pollDiv.appendChild(pollDetails);
-
+    pollDiv.innerHTML = `
+        <h3>${poll.title}</h3>
+        <p>by ${poll.by} | Score: ${poll.score}</p>
+    `;
     pollsColumn.appendChild(pollDiv);
 }
 
-// Fetch comments by ID
-async function fetchCommentsByIds(commentIds, parentId) {
-    const parentDiv = document.getElementById(parentId);
-    for (let id of commentIds) {
-        try {
-            const res = await fetch(storyURL(id));
-            const commentData = await res.json();
-            if (commentData && commentData.type === 'comment') {
-                displayComment(commentData, parentDiv);
-                if (commentData.kids) {
-                    fetchCommentsByIds(commentData.kids, parentDiv);
-                }
-            }
-        } catch (error) {
-            console.error('Error fetching comment:', error);
-        }
-    }
-}
-
-function displayComment(comment, parentElement) {
-    const commentDiv = document.createElement('div');
-    commentDiv.classList.add('comment');
-
-    const commentText = document.createElement('p');
-    commentText.innerHTML = `<strong>${comment.by}:</strong> ${comment.text}`;
-
-    commentDiv.appendChild(commentText);
-    parentElement.appendChild(commentDiv);
-}
-
-// Live update for new stories
+// Check for new stories
 async function checkForNewStories() {
     try {
-        const response = await fetch(newStoriesURL);
-        const newStoryIds = await response.json();
+        const newStoryIds = await fetchData(NEW_STORIES_URL);
         if (newStoryIds[0] !== latestStoryId) {
             latestStoryId = newStoryIds[0];
             alertUserOfNewStories();
@@ -211,21 +163,31 @@ async function checkForNewStories() {
     }
 }
 
+// Alert user of new stories
 function alertUserOfNewStories() {
     const alertDiv = document.createElement('div');
     alertDiv.classList.add('new-stories-alert');
     alertDiv.textContent = 'New stories are available! Click to refresh.';
-    document.body.appendChild(alertDiv);
+    document.body.prepend(alertDiv);
 
     alertDiv.addEventListener('click', () => {
         location.reload();
     });
 }
 
-// Set interval for live updates
-setInterval(checkForNewStories, 5000);
+// Infinite scroll
+const debouncedLoadNextStories = debounce(() => {
+    if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {
+        loadNextStories();
+    }
+}, 200);
+
+window.addEventListener('scroll', debouncedLoadNextStories);
 
 // Initialize
-fetchStoriesIds();
-fetchJobStoriesIds();
-fetchPollStoriesIds();
+loadStories();
+loadJobs();
+loadPolls();
+
+// Set interval for live updates
+setInterval(checkForNewStories, UPDATE_INTERVAL);
