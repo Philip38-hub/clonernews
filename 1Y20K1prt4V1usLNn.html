@@ -1,0 +1,367 @@
+<html><head><base href="https://hacker-news.firebaseio.com/v0/"><title>Hacker News UI</title><style>
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    background-color: #f6f6ef;
+}
+
+nav {
+    background-color: #ff6600;
+    padding: 5px 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+nav ul {
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+}
+
+nav ul li {
+    margin: 0 15px;
+}
+
+nav ul li a {
+    color: #000;
+    text-decoration: none;
+    font-size: 14px;
+}
+
+.menu-items {
+    margin-left: auto;
+}
+
+.container {
+    display: grid;
+    grid-template-columns: 1fr 2fr 1fr;
+    grid-gap: 20px;
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.column {
+    background-color: #fff;
+    border: 1px solid #eee;
+    border-radius: 4px;
+    padding: 15px;
+    height: calc(100vh - 100px);
+    overflow-y: auto;
+}
+
+.story, .job, .poll {
+    padding: 10px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.story h3, .job h3, .poll h3 {
+    margin: 0;
+    font-size: 14px;
+}
+
+.live-update {
+    background-color: #ff6600;
+    color: #fff;
+    padding: 5px;
+    text-align: center;
+    margin-bottom: 10px;
+    font-weight: bold;
+    font-size: 12px;
+    border-radius: 4px;
+}
+
+.new-stories-alert {
+    background-color: #ff6600;
+    color: #fff;
+    text-align: center;
+    padding: 10px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.story a, .job a, .poll a {
+    color: #000;
+    text-decoration: none;
+}
+
+.story a:hover, .job a:hover, .poll a:hover {
+    text-decoration: underline;
+}
+
+.story-meta, .job-meta, .poll-meta {
+    font-size: 12px;
+    color: #828282;
+    margin-top: 5px;
+}
+
+.comments-link {
+    color: #828282;
+    text-decoration: none;
+    margin-left: 5px;
+}
+
+.comments-link:hover {
+    text-decoration: underline;
+}
+
+#loading {
+    text-align: center;
+    padding: 20px;
+    font-style: italic;
+    color: #828282;
+}
+</style></head><body>
+    <nav>
+        <ul class="home-menu">
+            <li><a href="/">Hacker News</a></li>
+        </ul>
+        <ul class="menu-items">
+            <li><a href="#" id="newStoriesLink">New</a></li>
+            <li><a href="#" id="topStoriesLink">Top</a></li>
+            <li><a href="#" id="bestStoriesLink">Best</a></li>
+            <li><a href="#" id="askStoriesLink">Ask</a></li>
+            <li><a href="#" id="showStoriesLink">Show</a></li>
+            <li><a href="#" id="jobStoriesLink">Jobs</a></li>
+        </ul>
+    </nav>
+
+    <div class="container">
+        <div id="jobs-column" class="column">
+            <div class="live-update">Live Jobs Update</div>
+            <div id="jobs-content"></div>
+        </div>
+        <div id="stories-column" class="column">
+            <div class="live-update">Live Stories Update</div>
+            <div id="stories-content"></div>
+            <div id="loading">Loading more stories...</div>
+        </div>
+        <div id="polls-column" class="column">
+            <div class="live-update">Live Polls Update</div>
+            <div id="polls-content"></div>
+        </div>
+    </div>
+
+    <script>
+    // Constants
+    const BASE_URL = 'https://hacker-news.firebaseio.com/v0/';
+    const ITEM_URL = `${BASE_URL}item/`;
+    const NEW_STORIES_URL = `${BASE_URL}newstories.json`;
+    const TOP_STORIES_URL = `${BASE_URL}topstories.json`;
+    const BEST_STORIES_URL = `${BASE_URL}beststories.json`;
+    const ASK_STORIES_URL = `${BASE_URL}askstories.json`;
+    const SHOW_STORIES_URL = `${BASE_URL}showstories.json`;
+    const JOB_STORIES_URL = `${BASE_URL}jobstories.json`;
+
+    const storiesContent = document.getElementById('stories-content');
+    const jobsContent = document.getElementById('jobs-content');
+    const pollsContent = document.getElementById('polls-content');
+    const loadingElement = document.getElementById('loading');
+
+    const STORIES_PER_BATCH = 10;
+    const UPDATE_INTERVAL = 5000; // 5 seconds
+
+    let storiesIds = [];
+    let currentStoryIndex = 0;
+    let latestStoryId = null;
+    let currentStoryType = 'new';
+
+    // Debounce function
+    function debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+
+    // Fetch data from API
+    async function fetchData(url) {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return await response.json();
+    }
+
+    // Load stories
+    async function loadStories(url) {
+        try {
+            storiesIds = await fetchData(url);
+            latestStoryId = storiesIds[0];
+            currentStoryIndex = 0;
+            storiesContent.innerHTML = '';
+            loadNextStories();
+        } catch (error) {
+            console.error('Error fetching stories:', error);
+        }
+    }
+
+    // Load next batch of stories
+    async function loadNextStories() {
+        loadingElement.style.display = 'block';
+        const nextBatch = storiesIds.slice(currentStoryIndex, currentStoryIndex + STORIES_PER_BATCH);
+        for (const id of nextBatch) {
+            await fetchAndDisplayStory(id);
+        }
+        currentStoryIndex += STORIES_PER_BATCH;
+        loadingElement.style.display = 'none';
+    }
+
+    // Fetch and display a story
+    async function fetchAndDisplayStory(id) {
+        try {
+            const storyData = await fetchData(`${ITEM_URL}${id}.json`);
+            if (storyData && (storyData.type === 'story' || storyData.type === 'job')) {
+                displayStory(storyData);
+            }
+        } catch (error) {
+            console.error('Error fetching story:', error);
+        }
+    }
+
+    // Display a story
+    function displayStory(story) {
+        const storyDiv = document.createElement('div');
+        storyDiv.classList.add('story');
+        storyDiv.innerHTML = `
+            <h3><a href="${story.url || `item?id=${story.id}`}" target="_blank">${story.title}</a></h3>
+            <div class="story-meta">
+                by ${story.by} | ${story.score} points
+                ${story.descendants !== undefined ? `| <a href="item?id=${story.id}" class="comments-link">${story.descendants} comments</a>` : ''}
+            </div>
+        `;
+        storiesContent.appendChild(storyDiv);
+    }
+
+    // Load jobs
+    async function loadJobs() {
+        try {
+            const jobIds = await fetchData(JOB_STORIES_URL);
+            jobsContent.innerHTML = '';
+            for (const id of jobIds.slice(0, 10)) {
+                await fetchAndDisplayJob(id);
+            }
+        } catch (error) {
+            console.error('Error fetching jobs:', error);
+        }
+    }
+
+    // Fetch and display a job
+    async function fetchAndDisplayJob(id) {
+        try {
+            const jobData = await fetchData(`${ITEM_URL}${id}.json`);
+            if (jobData && jobData.type === 'job') {
+                displayJob(jobData);
+            }
+        } catch (error) {
+            console.error('Error fetching job:', error);
+        }
+    }
+
+    // Display a job
+    function displayJob(job) {
+        const jobDiv = document.createElement('div');
+        jobDiv.classList.add('job');
+        jobDiv.innerHTML = `
+            <h3><a href="${job.url || `item?id=${job.id}`}" target="_blank">${job.title}</a></h3>
+            <div class="job-meta">by ${job.by}</div>
+        `;
+        jobsContent.appendChild(jobDiv);
+    }
+
+    // Check for new stories
+    async function checkForNewStories() {
+        try {
+            const newStoryIds = await fetchData(NEW_STORIES_URL);
+            if (newStoryIds[0] !== latestStoryId) {
+                latestStoryId = newStoryIds[0];
+                alertUserOfNewStories();
+            }
+        } catch (error) {
+            console.error('Error checking for new stories:', error);
+        }
+    }
+
+    // Alert user of new stories
+    function alertUserOfNewStories() {
+        const alertDiv = document.createElement('div');
+        alertDiv.classList.add('new-stories-alert');
+        alertDiv.textContent = 'New stories are available! Click to refresh.';
+        document.body.prepend(alertDiv);
+
+        alertDiv.addEventListener('click', () => {
+            loadStories(NEW_STORIES_URL);
+            alertDiv.remove();
+        });
+    }
+
+    // Infinite scroll
+    const debouncedLoadNextStories = debounce(() => {
+        if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {
+            loadNextStories();
+        }
+    }, 200);
+
+    window.addEventListener('scroll', debouncedLoadNextStories);
+
+    // Initialize
+    loadStories(NEW_STORIES_URL);
+    loadJobs();
+
+    // Set interval for live updates
+    setInterval(checkForNewStories, UPDATE_INTERVAL);
+
+    // Event listeners for navigation
+    document.getElementById('newStoriesLink').addEventListener('click', (e) => {
+        e.preventDefault();
+        loadStories(NEW_STORIES_URL);
+        currentStoryType = 'new';
+    });
+
+    document.getElementById('topStoriesLink').addEventListener('click', (e) => {
+        e.preventDefault();
+        loadStories(TOP_STORIES_URL);
+        currentStoryType = 'top';
+    });
+
+    document.getElementById('bestStoriesLink').addEventListener('click', (e) => {
+        e.preventDefault();
+        loadStories(BEST_STORIES_URL);
+        currentStoryType = 'best';
+    });
+
+    document.getElementById('askStoriesLink').addEventListener('click', (e) => {
+        e.preventDefault();
+        loadStories(ASK_STORIES_URL);
+        currentStoryType = 'ask';
+    });
+
+    document.getElementById('showStoriesLink').addEventListener('click', (e) => {
+        e.preventDefault();
+        loadStories(SHOW_STORIES_URL);
+        currentStoryType = 'show';
+    });
+
+    document.getElementById('jobStoriesLink').addEventListener('click', (e) => {
+        e.preventDefault();
+        loadStories(JOB_STORIES_URL);
+        currentStoryType = 'job';
+    });
+    </script>
+</body></html>
