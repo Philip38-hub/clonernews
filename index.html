@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hacker News UI</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+    <nav>
+
+        <!-- Left-aligned Home menu item -->
+        <ul class="home-menu">
+            <li><a href="#">Home</a></li>
+        </ul>
+
+        <!-- Right-aligned menu items -->
+        <ul class="menu-items">
+            <li><a href="#">Latest Stories</a></li>
+            <li><a href="#">Top Stories</a></li>
+            <li><a href="#">All Stories</a></li>
+            <li><a href="#">Jobs</a></li>
+            <li><a href="#">Polls</a></li>
+        </ul>
+    </nav>
+
+    <div class="container">
+        <!-- Left column for Jobs -->
+        <div id="jobs-column" class="column">
+            <div class="live-update">Live Jobs Update</div>
+            <!-- Jobs will be dynamically inserted here -->
+        </div>
+
+        <!-- Middle column for Stories -->
+        <div id="stories-column" class="column">
+            <div class="live-update">Live Stories Update</div>
+            <!-- Infinite scroll for stories -->
+        </div>
+
+        <!-- Right column for Polls -->
+        <div id="polls-column" class="column">
+            <div class="live-update">Live Polls Update</div>
+            <!-- Polls will be dynamically inserted here -->
+        </div>
+    </div>
+
+</body>
+
+</html>
