@@ -1,194 +1,218 @@
-// API URLS
+// API URLs
+const apiBaseURL = 'https://hacker-news.firebaseio.com/v0/';
+const getStoriesURL = (type) => `${apiBaseURL}${type}.json`;
+const itemURL = (id) => `${apiBaseURL}item/${id}.json`;
 
-const newStoriesURL = 'https://hacker-news.firebaseio.com/v0/newstories.json?print=pretty';
-const itemURL = (id) =>`https://hacker-news.firebaseio.com/v0/item/${id}.json?print=pretty`;
-const jobStoriesURL = `https://hacker-news.firebaseio.com/v0/jobstories.json?print=pretty`;
-const maxItemURL = 'https://hacker-news.firebaseio.com/v0/maxitem.json?print=pretty';
+let currentStoriesType = 'newstories';
+let storiesIds = [];
+let jobsIds = [];
+let storiesIndex = 0;
+let jobsIndex = 0;
+const storiesPerBatch = 10;
+const jobsPerBatch = 5;
 
-let maxItemId = null;
+// Cache for stories and comments
+const cache = new Map();
 
-const storiesPerBatch = 10; // Load 10 stories per scroll
-
-// Fetch the new stories IDs
-async function fetchStoriesIds() {
+// Fetch the stories IDs based on type
+async function fetchStoriesIds(type) {
     try {
-        const response = await fetch(newStoriesURL);
-        const storiesIds = await response.json();
-        loadNextStories(storiesIds); // Load initial batch of stories
+        const response = await fetch(getStoriesURL(type));
+        storiesIds = await response.json();
+        storiesIndex = 0;
+        document.getElementById('stories-container').innerHTML = '';
+        loadNextStories();
     } catch (error) {
         console.error('Error fetching stories IDs:', error);
     }
 }
 
-async function fetchJobs() {
+// Fetch job stories
+async function fetchJobsIds() {
     try {
-        const response = await fetch(jobStoriesURL);
-        const jobIds = await response.json();
-        loadNextJobs(jobIds);
+        const response = await fetch(getStoriesURL('jobstories'));
+        jobsIds = await response.json();
+        jobsIndex = 0;
+        document.getElementById('jobs-container').innerHTML = '';
+        loadNextJobs();
     } catch (error) {
-        console.error('Error fetching jobs:', error);
+        console.error('Error fetching job IDs:', error);
     }
 }
 
-
-// Fetch a story by ID and append it to the DOM
-// Reusable function to fetch any item by ID (story or job)
-async function fetchItemById(id, type) {
+// Fetch an item by ID and cache it
+async function fetchItemById(id) {
+    if (cache.has(id)) {
+        return cache.get(id);
+    }
     try {
         const response = await fetch(itemURL(id));
         const itemData = await response.json();
-        if (itemData && itemData.type === type) {
-            if (type === 'story') {
-                displayStory(itemData);
-            } else if (type === 'job') {
-                displayJob(itemData);
-            }
-        }
+        cache.set(id, itemData);
+        return itemData;
     } catch (error) {
-        console.error(`Error fetching ${type}:`, error);
+        console.error(`Error fetching item ${id}:`, error);
     }
 }
 
-async function fetchMaxItemId() {
-    try {
-        const response = await fetch(maxItemURL);
-        maxItemId = await response.json();
-        fetchAllPolls(maxItemId); // Start fetching polls from the max item ID
-    } catch (error) {
-        console.error('Error fetching max item ID:', error);
-    }
-}
-
-// Fetch all polls and display them
-async function fetchAllPolls(startId) {
-    let currentId = startId;
-    let count = 0;
-
-    while (currentId > 0 && count < 10) { // Adjust the limit based on how many items you want to fetch
-        try {
-            const response = await fetch(itemURL(currentId));
-            const itemData = await response.json();
-
-            if (itemData && itemData.type === 'poll') {
-                displayPoll(itemData);
-                count++;
-            }
-            currentId--;
-        } catch (error) {
-            console.error('Error fetching item:', error);
-            currentId--;
-        }
-    }
-}
-
-// Function to display a story in the middle column with a text preview
+// Display a story in the stories container
 function displayStory(story) {
     const storyDiv = document.createElement('div');
     storyDiv.classList.add('story');
-    
-    const storyTitle = document.createElement('h3');
-    const storyLink = document.createElement('a');
-    storyLink.href = story.url;
-    storyLink.textContent = story.title;
-    storyTitle.appendChild(storyLink);
-
-    const storyDetails = document.createElement('p');
-    storyDetails.innerHTML = `by ${story.by} | Score: ${story.score} | Comments: ${story.descendants}`;
-    
-    // Add text preview if available
-    const storyPreview = document.createElement('p');
-    storyPreview.classList.add('preview');
-    storyPreview.textContent = story.text ? truncateText(story.text, 200) : 'No preview available';
-
-    storyDiv.appendChild(storyTitle);
-    storyDiv.appendChild(storyDetails);
-    storyDiv.appendChild(storyPreview);
-
-    const newStoriesColumn = document.getElementById('stories-column');
-    newStoriesColumn.appendChild(storyDiv);
+    storyDiv.innerHTML = `
+        <h3><a href="${story.url || '#'}" target="_blank">${story.title}</a></h3>
+        <p>by ${story.by} | Score: ${story.score} | ${new Date(story.time * 1000).toLocaleString()} | Comments: ${story.descendants || 0}</p>
+    `;
+    storyDiv.addEventListener('click', () => showStoryDetails(story));
+    document.getElementById('stories-container').appendChild(storyDiv);
 }
 
-// Function to display a poll in the polls column with a text preview
-function displayPoll(poll) {
-    const pollDiv = document.createElement('div');
-    pollDiv.classList.add('poll');
-
-    const pollTitle = document.createElement('h3');
-    pollTitle.textContent = poll.title;
-
-    const pollDetails = document.createElement('p');
-    pollDetails.innerHTML = `by ${poll.by} | Score: ${poll.score || 0} | ${new Date(poll.time * 1000).toLocaleString()}`;
-    
-    // Add text preview if available
-    const pollPreview = document.createElement('p');
-    pollPreview.classList.add('preview');
-    pollPreview.textContent = poll.text ? truncateText(poll.text, 200) : 'No preview available';
-
-    pollDiv.appendChild(pollTitle);
-    pollDiv.appendChild(pollDetails);
-    pollDiv.appendChild(pollPreview);
-
-    const pollsColumn = document.getElementById('polls-column');
-    pollsColumn.appendChild(pollDiv);
-}
-
+// Display a job in the jobs container
 function displayJob(job) {
     const jobDiv = document.createElement('div');
     jobDiv.classList.add('job');
+    jobDiv.innerHTML = `
+        <h3><a href="${job.url || '#'}" target="_blank">${job.title}</a></h3>
+        <p>${new Date(job.time * 1000).toLocaleString()}</p>
+    `;
+    document.getElementById('jobs-container').appendChild(jobDiv);
+}
 
-    const jobTitle = document.createElement('h3');
-    const jobLink = document.createElement('a');
-    jobLink.href = job.url || '#'; // Jobs might not always have a URL
-    jobLink.textContent = job.title; // Job title
-    jobTitle.appendChild(jobLink);
-
-    const jobDetails = document.createElement('p');
-    jobDetails.innerHTML = `by ${job.by} | Score: ${job.score || 0} | ${new Date(job.time * 1000).toLocaleString()}`;
+// Show story details and comments in a popup
+async function showStoryDetails(story) {
+    const popup = document.getElementById('story-popup');
+    const details = document.getElementById('story-details');
+    const commentsContainer = document.getElementById('comments-container');
     
-    // Add text preview if available
-    const jobPreview = document.createElement('p');
-    jobPreview.classList.add('preview');
-    jobPreview.textContent = job.text ? truncateText(job.text, 200) : 'No preview available';
-
-    jobDiv.appendChild(jobTitle);
-    jobDiv.appendChild(jobDetails);
-    jobDiv.appendChild(jobPreview);
-
-    document.getElementById('jobs-column').appendChild(jobDiv); // Append to jobs column
-}
-
-// Helper function to truncate text to a specified length
-function truncateText(text, length) {
-    if (text.length > length) {
-        return text.substring(0, length) + '...';
+    details.innerHTML = `
+        <h2>${story.title}</h2>
+        <p>by ${story.by} | Score: ${story.score} | ${new Date(story.time * 1000).toLocaleString()}</p>
+        ${story.text ? `<p>${story.text}</p>` : ''}
+        ${story.url ? `<p><a href="${story.url}" target="_blank">Read more</a></p>` : ''}
+    `;
+    
+    commentsContainer.innerHTML = '<h3>Comments</h3>';
+    if (story.kids) {
+        await fetchComments(story.kids, commentsContainer);
     }
-    return text;
+    
+    popup.style.display = 'block';
 }
 
-
-function loadNextStories(storiesIds) {
-    const nextBatch = storiesIds.slice(0, storiesPerBatch);
-    nextBatch.forEach((id) => fetchItemById(id, 'story')); // Fetch stories
-}
-
-function loadNextJobs(jobIds) {
-    const nextBatch = jobIds.slice(0, storiesPerBatch);
-    nextBatch.forEach((id) => fetchItemById(id, 'job')); // Fetch jobs
-}
-
-// Handle infinite scroll event
-window.addEventListener('scroll', () => {
-    if (window.innerHeight + window.scrollY >= document.body.offsetHeight) {
-        loadNextStories();
+// Fetch and display comments
+async function fetchComments(commentIds, container, depth = 0) {
+    for (const commentId of commentIds) {
+        const comment = await fetchItemById(commentId);
+        if (comment && !comment.deleted && !comment.dead) {
+            displayComment(comment, container, depth);
+            if (comment.kids) {
+                await fetchComments(comment.kids, container, depth + 1);
+            }
+        }
     }
+}
+
+// Display a single comment
+function displayComment(comment, container, depth) {
+    const commentDiv = document.createElement('div');
+    commentDiv.classList.add('comment');
+    commentDiv.style.marginLeft = `${depth * 20}px`;
+    commentDiv.innerHTML = `
+        <p><strong>${comment.by}</strong> | ${new Date(comment.time * 1000).toLocaleString()}</p>
+        <p>${comment.text}</p>
+    `;
+    container.appendChild(commentDiv);
+}
+
+// Load next batch of stories
+function loadNextStories() {
+    const nextBatch = storiesIds.slice(storiesIndex, storiesIndex + storiesPerBatch);
+    storiesIndex += storiesPerBatch;
+    nextBatch.forEach(id => fetchItemById(id).then(displayStory));
+}
+
+// Load next batch of jobs
+function loadNextJobs() {
+    const nextBatch = jobsIds.slice(jobsIndex, jobsIndex + jobsPerBatch);
+    jobsIndex += jobsPerBatch;
+    nextBatch.forEach(id => fetchItemById(id).then(displayJob));
+}
+
+// Live update function for stories
+function liveUpdateStories() {
+    const lastStoryId = storiesIds[0];
+    fetchStoriesIds(currentStoriesType).then(() => {
+        const newStories = storiesIds.filter(id => id > lastStoryId);
+        if (newStories.length > 0) {
+            updateLiveUpdateIndicator('stories', newStories.length);
+        }
+    });
+}
+
+// Live update function for jobs
+function liveUpdateJobs() {
+    const lastJobId = jobsIds[0];
+    fetchJobsIds().then(() => {
+        const newJobs = jobsIds.filter(id => id > lastJobId);
+        if (newJobs.length > 0) {
+            updateLiveUpdateIndicator('jobs', newJobs.length);
+        }
+    });
+}
+
+// Update live update indicator
+function updateLiveUpdateIndicator(type, count) {
+    const indicator = document.getElementById(`${type}-live-update`);
+    indicator.textContent = `${count} new ${type}`;
+    indicator.classList.add('active');
+    setTimeout(() => {
+        indicator.classList.remove('active');
+    }, 3000);
+}
+
+// Debounce function
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// Event listeners
+document.getElementById('story-filter').addEventListener('change', (event) => {
+    currentStoriesType = event.target.value;
+    fetchStoriesIds(currentStoriesType);
 });
 
-// Live update - refresh every 5 seconds
-setInterval(() => {
-    fetchStoriesIds(); // Fetch new stories every 5 seconds
-}, 5000);
+document.getElementById('show-more').addEventListener('click', loadNextStories);
 
-// Initialize by fetching the first batch of stories
-fetchStoriesIds();
-fetchJobs();
-fetchMaxItemId();
+document.querySelector('.close-button').addEventListener('click', () => {
+    document.getElementById('story-popup').style.display = 'none';
+});
+
+window.addEventListener('scroll', debounce(() => {
+    if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {
+        loadNextStories();
+        loadNextJobs();
+    }
+}, 250));
+
+// Initialize
+fetchStoriesIds(currentStoriesType);
+fetchJobsIds();
+setInterval(liveUpdateStories, 5000);
+setInterval(liveUpdateJobs, 5000);
+
+// Event delegation for menu items
+document.querySelector('.menu-items').addEventListener('click', (event) => {
+    if (event.target.tagName === 'A') {
+        event.preventDefault();
+        currentStoriesType = event.target.getAttribute('data-type');
+        fetchStoriesIds(currentStoriesType);
+    }
+});

@@ -1,60 +1,55 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hacker News UI</title>
     <link rel="stylesheet" href="styles.css">
 </head>
-
 <body>
-
     <nav>
-
-        <!-- Left-aligned Home menu item -->
-        <ul class="home-menu">
-            <li><a href="#">Home</a></li>
-        </ul>
-
-        <!-- Right-aligned menu items -->
         <ul class="menu-items">
-            <li><a href="#">Latest Stories</a></li>
-            <li><a href="#">Top Stories</a></li>
-            <li><a href="#">All Stories</a></li>
-            <li><a href="#">Jobs</a></li>
-            <li><a href="#">Polls</a></li>
+            <li><a href="#" data-type="askstories">Hacker News</a></li>
         </ul>
     </nav>
-
     <div class="container">
         <!-- Left column for Jobs -->
         <div id="jobs-column" class="column">
-            <div class="live-update">Latest Jobs</div>
-            <!-- Jobs will be dynamically inserted here -->
+            <h2>Latest Jobs</h2>
+            <div id="jobs-live-update" class="live-update"></div>
+            <div id="jobs-container"></div>
         </div>
-
         <!-- Middle column for Stories -->
         <div id="stories-column" class="column">
-            <div class="live-update">New Stories Update</div>
-            <!-- Infinite scroll for stories -->
+            <div class="filter-container">
+                <h2>Hacker News</h2>
+                <label for="story-filter">Filter Stories:</label>
+                <select id="story-filter">
+                    <option value="newstories">New Stories</option>
+                    <option value="topstories">Top Stories</option>
+                    <option value="beststories">Best Stories</option>
+                    <option value="askstories">Ask Stories</option>
+                    <option value="showstories">Show Stories</option>
+                </select>
+            </div>
+            <div id="stories-live-update" class="live-update"></div>
+            <div id="stories-container"></div>
+            <button id="show-more">Show More</button>
         </div>
-
-        <!-- Right column for Polls -->
-        <div id="polls-column" class="column">
-            <div class="live-update">Polls</div>
-            <!-- Polls will be dynamically inserted here -->
+         <!-- Left column for Jobs -->
+         <div id="polls-column" class="column">
+            <h2>Latest Polls</h2>
+            <div id="polls-live-update" class="live-update"></div>
+            <div id="polls-container"></div>
         </div>
     </div>
-
-    <!-- Popup Modal HTML -->
     <div id="story-popup" class="modal">
         <div class="modal-content">
             <span class="close-button">&times;</span>
             <div id="story-details"></div>
+            <div id="comments-container"></div>
         </div>
     </div>
     <script src="script.js"></script>
 </body>
-
 </html>
