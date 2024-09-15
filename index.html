@@ -30,20 +30,28 @@
     <div class="container">
         <!-- Left column for Jobs -->
         <div id="jobs-column" class="column">
-            <div class="live-update">Live Jobs Update</div>
+            <div class="live-update">Latest Jobs</div>
             <!-- Jobs will be dynamically inserted here -->
         </div>
 
         <!-- Middle column for Stories -->
         <div id="stories-column" class="column">
-            <div class="live-update">Live Stories Update</div>
+            <div class="live-update">New Stories Update</div>
             <!-- Infinite scroll for stories -->
         </div>
 
         <!-- Right column for Polls -->
         <div id="polls-column" class="column">
-            <div class="live-update">Live Polls Update</div>
+            <div class="live-update">Polls</div>
             <!-- Polls will be dynamically inserted here -->
+        </div>
+    </div>
+
+    <!-- Popup Modal HTML -->
+    <div id="story-popup" class="modal">
+        <div class="modal-content">
+            <span class="close-button">&times;</span>
+            <div id="story-details"></div>
         </div>
     </div>
     <script src="script.js"></script>
