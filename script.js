@@ -2,6 +2,7 @@
 const apiBaseURL = 'https://hacker-news.firebaseio.com/v0/';
 const getStoriesURL = (type) => `${apiBaseURL}${type}.json`;
 const itemURL = (id) => `${apiBaseURL}item/${id}.json`;
+const pollsURL = 'https://hn.algolia.com/api/v1/search_by_date?tags=poll';
 
 let currentStoriesType = 'newstories';
 let storiesIds = [];
@@ -13,6 +14,43 @@ const jobsPerBatch = 5;
 
 // Cache for stories and comments
 const cache = new Map();
+
+// Fetch polls data
+async function fetchPolls() {
+    try {
+        const response = await fetch(pollsURL);
+        const pollData = await response.json();
+        document.getElementById('polls-container').innerHTML = '';
+        pollData.hits.forEach(poll => {
+            displayPoll(poll);
+        });
+    } catch (error) {
+        console.error('Error fetching polls:', error);
+    }
+}
+
+// Display a poll in the polls container
+function displayPoll(poll) {
+    const pollDiv = document.createElement('div');
+    pollDiv.classList.add('poll');
+    pollDiv.innerHTML = `
+        <h3>${poll.title}</h3>
+        <p>by ${poll.author} | ${new Date(poll.created_at_i * 1000).toLocaleString()}</p>
+        <p>Comments: ${poll.num_comments || 0}</p>
+    `;
+    document.getElementById('polls-container').appendChild(pollDiv);
+}
+
+// Initialize polls fetching
+fetchPolls();
+
+// Live update function for polls
+function liveUpdatePolls() {
+    fetchPolls();
+}
+
+// Set interval for live polling update every 5 seconds
+setInterval(liveUpdatePolls, 5000);
 
 // Fetch the stories IDs based on type
 async function fetchStoriesIds(type) {
