@@ -15,6 +15,11 @@ const jobsPerBatch = 5;
 // Cache for stories and comments
 const cache = new Map();
 
+// Convert timestamp to locale string
+function formatDate(timestamp) {
+    return new Date(timestamp * 1000).toLocaleString();
+}
+
 // Fetch polls data
 async function fetchPolls() {
     try {
@@ -26,6 +31,7 @@ async function fetchPolls() {
         });
     } catch (error) {
         console.error('Error fetching polls:', error);
+        displayError('polls-container', 'Failed to fetch polls. Please try again later.');
     }
 }
 
@@ -33,9 +39,11 @@ async function fetchPolls() {
 function displayPoll(poll) {
     const pollDiv = document.createElement('div');
     pollDiv.classList.add('poll');
+    // Construct the Hacker News item URL using the objectID
+    const hnItemUrl = `https://news.ycombinator.com/item?id=${poll.objectID}`;
     pollDiv.innerHTML = `
-        <h3>${poll.title}</h3>
-        <p>by ${poll.author} | ${new Date(poll.created_at_i * 1000).toLocaleString()}</p>
+        <h3><a href="${hnItemUrl}" target="_blank">${poll.title}</a></h3>
+        <p>by ${poll.author} | ${formatDate(poll.created_at_i)}</p>
         <p>Comments: ${poll.num_comments || 0}</p>
     `;
     document.getElementById('polls-container').appendChild(pollDiv);
@@ -45,9 +53,7 @@ function displayPoll(poll) {
 fetchPolls();
 
 // Live update function for polls
-function liveUpdatePolls() {
-    fetchPolls();
-}
+const liveUpdatePolls = throttle(fetchPolls, 5000);
 
 // Set interval for live polling update every 5 seconds
 setInterval(liveUpdatePolls, 5000);
@@ -62,6 +68,7 @@ async function fetchStoriesIds(type) {
         loadNextStories();
     } catch (error) {
         console.error('Error fetching stories IDs:', error);
+        displayError('stories-container', 'Failed to fetch stories. Please try again later.');
     }
 }
 
@@ -75,6 +82,7 @@ async function fetchJobsIds() {
         loadNextJobs();
     } catch (error) {
         console.error('Error fetching job IDs:', error);
+        displayError('jobs-container', 'Failed to fetch jobs. Please try again later.');
     }
 }
 
@@ -90,6 +98,7 @@ async function fetchItemById(id) {
         return itemData;
     } catch (error) {
         console.error(`Error fetching item ${id}:`, error);
+        throw error;
     }
 }
 
@@ -99,7 +108,7 @@ function displayStory(story) {
     storyDiv.classList.add('story');
     storyDiv.innerHTML = `
         <h3><a href="${story.url || '#'}" target="_blank">${story.title}</a></h3>
-        <p>by ${story.by} | Score: ${story.score} | ${new Date(story.time * 1000).toLocaleString()} | Comments: ${story.descendants || 0}</p>
+        <p>by ${story.by} | Score: ${story.score} | ${formatDate(story.time)} | Comments: ${story.descendants || 0}</p>
     `;
     storyDiv.addEventListener('click', () => showStoryDetails(story));
     document.getElementById('stories-container').appendChild(storyDiv);
@@ -111,7 +120,7 @@ function displayJob(job) {
     jobDiv.classList.add('job');
     jobDiv.innerHTML = `
         <h3><a href="${job.url || '#'}" target="_blank">${job.title}</a></h3>
-        <p>${new Date(job.time * 1000).toLocaleString()}</p>
+        <p>${formatDate(job.time)}</p>
     `;
     document.getElementById('jobs-container').appendChild(jobDiv);
 }
@@ -124,7 +133,7 @@ async function showStoryDetails(story) {
     
     details.innerHTML = `
         <h2>${story.title}</h2>
-        <p>by ${story.by} | Score: ${story.score} | ${new Date(story.time * 1000).toLocaleString()}</p>
+        <p>by ${story.by} | Score: ${story.score} | ${formatDate(story.time)}</p>
         ${story.text ? `<p>${story.text}</p>` : ''}
         ${story.url ? `<p><a href="${story.url}" target="_blank">Read more</a></p>` : ''}
     `;
@@ -139,13 +148,18 @@ async function showStoryDetails(story) {
 
 // Fetch and display comments
 async function fetchComments(commentIds, container, depth = 0) {
-    for (const commentId of commentIds) {
-        const comment = await fetchItemById(commentId);
-        if (comment && !comment.deleted && !comment.dead) {
-            displayComment(comment, container, depth);
-            if (comment.kids) {
-                await fetchComments(comment.kids, container, depth + 1);
+    const sortedCommentIds = commentIds.sort((a, b) => b - a); // Sort comments newest first
+    for (const commentId of sortedCommentIds) {
+        try {
+            const comment = await fetchItemById(commentId);
+            if (comment && !comment.deleted && !comment.dead) {
+                displayComment(comment, container, depth);
+                if (comment.kids) {
+                    await fetchComments(comment.kids, container, depth + 1);
+                }
             }
+        } catch (error) {
+            console.error(`Error fetching comment ${commentId}:`, error);
         }
     }
 }
@@ -156,24 +170,38 @@ function displayComment(comment, container, depth) {
     commentDiv.classList.add('comment');
     commentDiv.style.marginLeft = `${depth * 20}px`;
     commentDiv.innerHTML = `
-        <p><strong>${comment.by}</strong> | ${new Date(comment.time * 1000).toLocaleString()}</p>
+        <p><strong>${comment.by}</strong> | ${formatDate(comment.time)}</p>
         <p>${comment.text}</p>
     `;
     container.appendChild(commentDiv);
 }
 
 // Load next batch of stories
-function loadNextStories() {
+async function loadNextStories() {
     const nextBatch = storiesIds.slice(storiesIndex, storiesIndex + storiesPerBatch);
     storiesIndex += storiesPerBatch;
-    nextBatch.forEach(id => fetchItemById(id).then(displayStory));
+    for (const id of nextBatch) {
+        try {
+            const story = await fetchItemById(id);
+            displayStory(story);
+        } catch (error) {
+            console.error(`Error displaying story ${id}:`, error);
+        }
+    }
 }
 
 // Load next batch of jobs
-function loadNextJobs() {
+async function loadNextJobs() {
     const nextBatch = jobsIds.slice(jobsIndex, jobsIndex + jobsPerBatch);
     jobsIndex += jobsPerBatch;
-    nextBatch.forEach(id => fetchItemById(id).then(displayJob));
+    for (const id of nextBatch) {
+        try {
+            const job = await fetchItemById(id);
+            displayJob(job);
+        } catch (error) {
+            console.error(`Error displaying job ${id}:`, error);
+        }
+    }
 }
 
 // Live update function for stories
@@ -184,6 +212,8 @@ function liveUpdateStories() {
         if (newStories.length > 0) {
             updateLiveUpdateIndicator('stories', newStories.length);
         }
+    }).catch(error => {
+        console.error('Error in live update stories:', error);
     });
 }
 
@@ -195,6 +225,8 @@ function liveUpdateJobs() {
         if (newJobs.length > 0) {
             updateLiveUpdateIndicator('jobs', newJobs.length);
         }
+    }).catch(error => {
+        console.error('Error in live update jobs:', error);
     });
 }
 
@@ -219,6 +251,29 @@ function debounce(func, wait) {
         clearTimeout(timeout);
         timeout = setTimeout(later, wait);
     };
+}
+
+// Throttle function
+function throttle(func, limit) {
+    let inThrottle;
+    return function() {
+        const args = arguments;
+        const context = this;
+        if (!inThrottle) {
+            func.apply(context, args);
+            inThrottle = true;
+            setTimeout(() => inThrottle = false, limit);
+        }
+    }
+}
+
+// Display error message
+function displayError(containerId, message) {
+    const container = document.getElementById(containerId);
+    const errorDiv = document.createElement('div');
+    errorDiv.classList.add('error-message');
+    errorDiv.textContent = message;
+    container.appendChild(errorDiv);
 }
 
 // Event listeners
